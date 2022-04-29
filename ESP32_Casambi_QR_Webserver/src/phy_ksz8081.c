@@ -1,0 +1,158 @@
+// Copyright 2015-2017 Espressif Systems (Shanghai) PTE LTD
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+#include "esp_log.h"
+#include "esp_eth.h"
+#include "eth_phy/phy_reg.h"
+#include <phy_ksz8081.h>
+
+#define ksz8081_PHY_ID1 0x0022
+
+/* ksz8081-specific registers */
+#define PHY_SPECIAL_CONTROL_STATUS_REG (0x1f)
+#define AUTO_NEGOTIATION_DONE BIT(12)
+#define DUPLEX_INDICATION_FULL BIT(4)
+#define SPEED_INDICATION_100T BIT(3)
+#define SPEED_INDICATION_10T BIT(2)
+#define SPEED_DUPLEX_INDICATION_10T_HALF 0x04
+#define SPEED_DUPLEX_INDICATION_10T_FULL 0x14
+#define SPEED_DUPLEX_INDICATION_100T_HALF 0x08
+#define SPEED_DUPLEX_INDICATION_100T_FULL 0x18
+
+static const char *TAG = "ksz8081";
+
+void phy_ksz8081_check_phy_init(void)
+{
+    //ESP_LOGE(TAG, "phy_ksz8081_check_phy_init()");
+    phy_ksz8081_dump_registers();
+
+    //esp_eth_smi_wait_set(MII_BASIC_MODE_STATUS_REG, MII_AUTO_NEGOTIATION_COMPLETE, 0);
+    //esp_eth_smi_wait_set(PHY_SPECIAL_CONTROL_STATUS_REG, AUTO_NEGOTIATION_DONE, 0);
+}
+
+eth_speed_mode_t phy_ksz8081_get_speed_mode(void)
+{
+    // if (esp_eth_smi_read(PHY_SPECIAL_CONTROL_STATUS_REG) & SPEED_INDICATION_100T) {
+    //TODO:
+    ESP_LOGE(TAG, "phy_ksz8081_get_speed_mode(100) TODO");
+    return ETH_SPEED_MODE_100M;
+    // } else {
+    //     ESP_LOGE(TAG, "phy_ksz8081_get_speed_mode(10)");
+    //     return ETH_SPEED_MODE_10M;
+    // }
+}
+
+eth_duplex_mode_t phy_ksz8081_get_duplex_mode(void)
+{
+    // if (esp_eth_smi_read(PHY_SPECIAL_CONTROL_STATUS_REG) & DUPLEX_INDICATION_FULL) {
+    //TODO
+    ESP_LOGE(TAG, "phy_ksz8081_get_duplex_mode(FULL) TODO");
+    return ETH_MODE_FULLDUPLEX;
+    // } else {
+    //     ESP_LOGE(TAG, "phy_ksz8081_get_duplex_mode(HALF)");
+    //     return ETH_MODE_HALFDUPLEX;
+    // }
+}
+
+void phy_ksz8081_power_enable(bool enable)
+{
+    if (enable) {
+        //uint32_t data = esp_eth_smi_read(MII_BASIC_MODE_CONTROL_REG);
+        //data |= MII_AUTO_NEGOTIATION_ENABLE | MII_RESTART_AUTO_NEGOTIATION;
+        //esp_eth_smi_write(MII_BASIC_MODE_CONTROL_REG, data);
+        // TODO: only enable if config.flow_ctrl_enable == true
+        phy_mii_enable_flow_ctrl();
+    }
+}
+
+esp_err_t phy_ksz8081_init(void)
+{
+    ESP_LOGE(TAG, "phy_ksz8081_init()");
+    phy_ksz8081_dump_registers();
+
+    esp_eth_smi_write(MII_BASIC_MODE_CONTROL_REG, MII_SOFTWARE_RESET);
+
+    esp_err_t res;
+    // Call esp_eth_smi_wait_value() with a timeout so it prints an error periodically
+    res = esp_eth_smi_wait_value(MII_PHY_IDENTIFIER_1_REG, ksz8081_PHY_ID1, UINT16_MAX, 1000);
+    esp_eth_smi_write(MII_BASIC_MODE_CONTROL_REG, MII_SOFTWARE_RESET);
+
+    uint32_t data = esp_eth_smi_read(MII_BASIC_MODE_CONTROL_REG);
+    data &= ~BIT(12);//auto neg off
+    data |= BIT(13);//100 mbit mode
+    esp_eth_smi_write(MII_BASIC_MODE_CONTROL_REG, data);
+    esp_eth_smi_write(0x1f, BIT(7));//clock
+    //esp_eth_smi_write(0x1f, BIT(2));//loopback
+
+    ets_delay_us(300);
+
+    // TODO: only enable if config.flow_ctrl_enable == true
+    phy_mii_enable_flow_ctrl();
+
+    if (res == ESP_OK) {
+        return ESP_OK;
+    } else {
+        return ESP_ERR_TIMEOUT;
+    }
+}
+
+bool phy_ksz8081_check_link_status(void){
+    //ESP_LOGE(TAG, "phy_ksz8081_check_link_status()");
+    //phy_ksz8081_dump_registers();
+    //return phy_mii_check_link_status();
+    uint16_t stat = esp_eth_smi_read(0x1);
+    if(stat & BIT(2)){
+ //       ESP_LOGE(TAG, "link up");
+        return true;
+    }else{
+//        ESP_LOGE(TAG, "link down");
+        return false;
+    }
+}
+
+const eth_config_t phy_ksz8081_default_ethernet_config = {
+    .phy_addr = 0,
+    .mac_mode = ETH_MODE_RMII,
+//    .clock_mode = ETH_CLOCK_GPIO16_OUT,
+    .clock_mode = ETH_CLOCK_GPIO0_OUT,
+    .flow_ctrl_enable = true,
+    .phy_init = phy_ksz8081_init,
+    .phy_check_init = phy_ksz8081_check_phy_init,
+    .phy_power_enable = phy_ksz8081_power_enable,
+    .phy_check_link = phy_ksz8081_check_link_status,
+    .phy_get_speed_mode = phy_ksz8081_get_speed_mode,
+    .phy_get_duplex_mode = phy_ksz8081_get_duplex_mode,
+    .phy_get_partner_pause_enable = phy_mii_get_partner_pause_enable,
+    .reset_timeout_ms = 1000,
+    .promiscuous_enable = false,
+};
+
+void phy_ksz8081_dump_registers()
+{
+    ESP_LOGE(TAG, "ksz8081 Registers:");
+    // ESP_LOGE(TAG, "BCR    0x%04x", esp_eth_smi_read(0x0));
+    // ESP_LOGE(TAG, "BSR    0x%04x", esp_eth_smi_read(0x1));
+    // ESP_LOGE(TAG, "PHY1   0x%04x", esp_eth_smi_read(0x2));
+    // ESP_LOGE(TAG, "PHY2   0x%04x", esp_eth_smi_read(0x3));
+    // ESP_LOGE(TAG, "ANAR   0x%04x", esp_eth_smi_read(0x4));
+    // ESP_LOGE(TAG, "ANLPAR 0x%04x", esp_eth_smi_read(0x5));
+    // ESP_LOGE(TAG, "ANER   0x%04x", esp_eth_smi_read(0x6));
+    // ESP_LOGE(TAG, "MCSR   0x%04x", esp_eth_smi_read(0x11));
+    // ESP_LOGE(TAG, "SM     0x%04x", esp_eth_smi_read(0x12));
+    // ESP_LOGE(TAG, "SECR   0x%04x", esp_eth_smi_read(0x1A));
+    // ESP_LOGE(TAG, "CSIR   0x%04x", esp_eth_smi_read(0x1B));
+    // ESP_LOGE(TAG, "ISR    0x%04x", esp_eth_smi_read(0x1D));
+    // ESP_LOGE(TAG, "IMR    0x%04x", esp_eth_smi_read(0x1E));
+    // ESP_LOGE(TAG, "PSCSR  0x%04x", esp_eth_smi_read(0x1F));
+    ESP_LOGE(TAG, "RXER   0x%04x", esp_eth_smi_read(0x15));
+}
