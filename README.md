@@ -47,6 +47,7 @@ esphome/ESPAsyncWebServer:<br/>
 
 Font Awesome Basic:<br/>
 [fontawesome](https://fontawesome.com/)<br/>
+Fontawesome data is not included here, because we are using an commercial license and are not allowed to share the icon files here. There are only Icons used from the free version. So it should not be an Problem to interchange the files in the /data/ directory.
 
 --------------------------------------------------------------------------------------
 
